@@ -96,20 +96,32 @@ local function setup_lsp()
         pattern = "fe",
         callback = function()
             local function find_root(patterns)
-                local cwd = vim.loop.cwd()
+                local current_file = vim.api.nvim_buf_get_name(0)
+                local start_dir = vim.fs.dirname(current_file)
+
                 for _, pattern in ipairs(patterns) do
-                    local path = vim.fs.find(pattern, { upward = true, path = cwd })
-                    if #path > 0 then
-                        return vim.fs.dirname(path[1])
+                    -- vim.notify("Looking for pattern: " .. pattern, vim.log.levels.DEBUG)
+
+                    local found = vim.fs.find(pattern, {
+                        upward = true,
+                        path = start_dir,
+                    })
+                    -- vim.notify("Plain pattern result: " .. vim.inspect(found), vim.log.levels.DEBUG)
+
+                    if #found > 0 then
+                        local dir = vim.fs.dirname(found[1])
+                        -- vim.notify("Found root dir: " .. dir, vim.log.levels.DEBUG)
+                        return dir
                     end
                 end
+                -- vim.notify("No root directory found", vim.log.levels.DEBUG)
                 return nil
             end
 
-            local root_dir = find_root({ ".git", "fe.toml" })
+            local root_dir = find_root({ "fe.toml" })
             if not root_dir then
-                vim.notify("Fe LSP: Could not determine root directory.", vim.log.levels.WARN)
-                return
+                root_dir = vim.fs.dirname(vim.api.nvim_buf_get_name(0))
+                -- vim.notify("Fe LSP: Using file parent as root directory.", vim.log.levels.INFO)
             end
 
             local client_id = vim.lsp.start_client({
