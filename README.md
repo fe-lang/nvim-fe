@@ -9,33 +9,36 @@ Neovim plugin for the **Fe programming language** with:
 
 ### Prerequisites
 
-1. **Neovim 0.9.0 or later**
-   - Requires Tree-sitter and `vim.filetype.add` support
+1. **`fe-language-server`**
+If you haven't already, install it to your `PATH`:
+  ```bash
+  cargo install --git https://github.com/ethereum/fe.git --branch fe-v2 fe-language-server
+  ```
+2. **Neovim 0.9.0 or later**
+Requires Tree-sitter and `vim.filetype.add` support
 
-2. **GCC or Clang**
-   - For compiling the Tree-sitter parser
+3. **GCC or Clang**
+For compiling the Tree-sitter parser
 
-3. **`fe-language-server`**
-   - Install to your `PATH`
 
 ---
 
 ### Manual Installation
 
 1. Copy this directory to:
-   ```bash
-   cp -r ./ ~/.local/share/nvim/site/pack/plugins/start/nvim-fe
-   ```
+  ```bash
+  cp -r ./ ~/.local/share/nvim/site/pack/plugins/start/nvim-fe
+  ```
 
 2. Install `nvim-treesitter`:
-   ```bash
-   git clone https://github.com/nvim-treesitter/nvim-treesitter ~/.local/share/nvim/site/pack/plugins/start/nvim-treesitter
-   ```
+  ```bash
+  git clone https://github.com/nvim-treesitter/nvim-treesitter ~/.local/share/nvim/site/pack/plugins/start/nvim-treesitter
+  ```
 
 3. Add to `init.lua`:
-   ```lua
-   require("nvim_fe").setup()
-   ```
+  ```lua
+  require("nvim_fe").setup()
+  ```
 
 ---
 
@@ -45,7 +48,7 @@ Add to your packer config:
 
 ```lua
 use({
-    "this/directory",
+    "https://github.com/fe-lang/nvim-fe",
     config = function()
         require("nvim_fe").setup()
     end,
@@ -59,21 +62,13 @@ use({
 
 ```lua
 {
-    "this/directory",
+    "https://github.com/fe-lang/nvim-fe",
     dependencies = { "nvim-treesitter/nvim-treesitter" },
     config = function()
         require("nvim_fe").setup()
     end,
 }
 ```
-
----
-
-## Features
-
-- **Syntax Highlighting**: Automatically highlights `.fe` files
-- **Indentation**: Tree-sitter-based indentation for `.fe` files
-- **LSP Support**: Dynamically starts the Fe language server when opening `.fe` files
 
 ---
 
