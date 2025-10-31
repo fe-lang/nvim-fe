@@ -57,37 +57,38 @@ end
 
 -- Configure Tree-sitter for Fe
 local function setup_treesitter()
-    local ok, parsers = pcall(require, "nvim-treesitter.parsers")
+    local ok, _ = pcall(require, "nvim-treesitter.parsers")
     if not ok then
         vim.notify("nvim-treesitter is not installed. Please install it for Fe syntax highlighting.", vim.log.levels
             .WARN)
         return
     end
 
-    -- Register the Fe parser using the new API
+    -- Register Fe parser with nvim-treesitter
+    -- require() must be called inside the callback to modify the cached module
     vim.api.nvim_create_autocmd("User", {
         pattern = "TSUpdate",
         callback = function()
-            parsers.fe = {
+            require("nvim-treesitter.parsers").fe = {
                 install_info = {
                     url = ts_repo_url,
                     files = { "src/parser.c", "src/scanner.c" },
+                    branch = "main",
                 },
             }
         end,
     })
 
-    -- Manually trigger the autocmd to register the parser immediately
+    -- Trigger registration immediately
     vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
 
-    -- Enable highlighting and indentation for Fe files
+    -- Enable highlighting for Fe files
     local group = vim.api.nvim_create_augroup("FeTreesitterSetup", { clear = true })
     vim.api.nvim_create_autocmd("FileType", {
         group = group,
         pattern = "fe",
         callback = function(args)
             vim.treesitter.start(args.buf)
-            vim.bo[args.buf].indentexpr = "v:lua.require'nvim-treesitter'.indentexpr()"
         end,
     })
 end
@@ -111,21 +112,16 @@ local function setup_lsp()
             local start_dir = vim.fs.dirname(current_file)
 
             for _, pattern in ipairs(patterns) do
-                -- vim.notify("Looking for pattern: " .. pattern, vim.log.levels.DEBUG)
-
                 local found = vim.fs.find(pattern, {
                     upward = true,
                     path = start_dir,
                 })
-                -- vim.notify("Plain pattern result: " .. vim.inspect(found), vim.log.levels.DEBUG)
 
                 if #found > 0 then
                     local dir = vim.fs.dirname(found[1])
-                    -- vim.notify("Found root dir: " .. dir, vim.log.levels.DEBUG)
                     return dir
                 end
             end
-            -- vim.notify("No root directory found", vim.log.levels.DEBUG)
             return nil
         end
 
@@ -173,7 +169,7 @@ local function setup_lsp()
     -- Trigger LSP for fe.toml files
     vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
         group = group,
-        pattern = "*/fe.toml",
+        pattern = "**/fe.toml",
         callback = function()
             start_or_attach_lsp()
         end,
