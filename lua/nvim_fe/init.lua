@@ -57,27 +57,39 @@ end
 
 -- Configure Tree-sitter for Fe
 local function setup_treesitter()
-    local ok, configs = pcall(require, "nvim-treesitter.configs")
+    local ok, _ = pcall(require, "nvim-treesitter.parsers")
     if not ok then
         vim.notify("nvim-treesitter is not installed. Please install it for Fe syntax highlighting.", vim.log.levels
             .WARN)
         return
     end
 
-    local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-    parser_config.fe = {
-        install_info = {
-            url = ts_repo_url,
-            files = { "src/parser.c", "src/scanner.c" },
-            branch = "main",
-        },
-        filetype = "fe",
-    }
+    -- Register Fe parser with nvim-treesitter
+    -- require() must be called inside the callback to modify the cached module
+    vim.api.nvim_create_autocmd("User", {
+        pattern = "TSUpdate",
+        callback = function()
+            require("nvim-treesitter.parsers").fe = {
+                install_info = {
+                    url = ts_repo_url,
+                    files = { "src/parser.c", "src/scanner.c" },
+                    branch = "main",
+                },
+            }
+        end,
+    })
 
-    configs.setup({
-        ensure_installed = { "fe" },
-        highlight = { enable = true },
-        indent = { enable = true },
+    -- Trigger registration immediately
+    vim.api.nvim_exec_autocmds("User", { pattern = "TSUpdate" })
+
+    -- Enable highlighting for Fe files
+    local group = vim.api.nvim_create_augroup("FeTreesitterSetup", { clear = true })
+    vim.api.nvim_create_autocmd("FileType", {
+        group = group,
+        pattern = "fe",
+        callback = function(args)
+            vim.treesitter.start(args.buf)
+        end,
     })
 end
 
@@ -92,49 +104,74 @@ end
 
 -- Set up LSP for Fe
 local function setup_lsp()
-    vim.api.nvim_create_autocmd("FileType", {
-        pattern = "fe",
-        callback = function()
-            local function find_root(patterns)
-                local current_file = vim.api.nvim_buf_get_name(0)
-                local start_dir = vim.fs.dirname(current_file)
+    local group = vim.api.nvim_create_augroup("FeLspSetup", { clear = true })
 
-                for _, pattern in ipairs(patterns) do
-                    -- vim.notify("Looking for pattern: " .. pattern, vim.log.levels.DEBUG)
+    local function start_or_attach_lsp()
+        local function find_root(patterns)
+            local current_file = vim.api.nvim_buf_get_name(0)
+            local start_dir = vim.fs.dirname(current_file)
 
-                    local found = vim.fs.find(pattern, {
-                        upward = true,
-                        path = start_dir,
-                    })
-                    -- vim.notify("Plain pattern result: " .. vim.inspect(found), vim.log.levels.DEBUG)
+            for _, pattern in ipairs(patterns) do
+                local found = vim.fs.find(pattern, {
+                    upward = true,
+                    path = start_dir,
+                })
 
-                    if #found > 0 then
-                        local dir = vim.fs.dirname(found[1])
-                        -- vim.notify("Found root dir: " .. dir, vim.log.levels.DEBUG)
-                        return dir
-                    end
+                if #found > 0 then
+                    local dir = vim.fs.dirname(found[1])
+                    return dir
                 end
-                -- vim.notify("No root directory found", vim.log.levels.DEBUG)
-                return nil
             end
+            return nil
+        end
 
-            local root_dir = find_root({ "fe.toml" })
-            if not root_dir then
-                root_dir = vim.fs.dirname(vim.api.nvim_buf_get_name(0))
-                -- vim.notify("Fe LSP: Using file parent as root directory.", vim.log.levels.INFO)
+        local root_dir = find_root({ "fe.toml" })
+        if not root_dir then
+            root_dir = vim.fs.dirname(vim.api.nvim_buf_get_name(0))
+        end
+
+        -- Check if ANY fe client already exists (ignore root_dir - reuse across all projects)
+        local existing_client = nil
+        local all_clients = vim.lsp.get_clients()
+
+        for _, client in ipairs(all_clients) do
+            if client.name == "fe" then
+                existing_client = client
+                break
             end
+        end
 
-            local client_id = vim.lsp.start_client({
+        -- Start or attach the client
+        if existing_client then
+            -- Reuse the existing client regardless of root_dir
+            -- The server will automatically load the ingot when the .fe file is opened
+            vim.lsp.buf_attach_client(0, existing_client.id)
+        else
+            -- Start new client only if no fe client exists at all
+            vim.lsp.start({
                 name = "fe",
                 cmd = { "fe-language-server" },
                 root_dir = root_dir,
-                filetypes = { "fe" },
             })
+        end
+    end
 
-            if client_id then
-                vim.lsp.buf_attach_client(0, client_id)
-                vim.keymap.set("n", "gd", vim.lsp.buf.definition, { buffer = true })
-            end
+    -- Trigger LSP for .fe files
+    vim.api.nvim_create_autocmd("FileType", {
+        group = group,
+        pattern = "fe",
+        callback = function()
+            start_or_attach_lsp()
+            vim.keymap.set("n", "gd", vim.lsp.buf.definition, { buffer = true })
+        end,
+    })
+
+    -- Trigger LSP for fe.toml files
+    vim.api.nvim_create_autocmd({ "BufRead", "BufNewFile" }, {
+        group = group,
+        pattern = "**/fe.toml",
+        callback = function()
+            start_or_attach_lsp()
         end,
     })
 end
