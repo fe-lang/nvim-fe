@@ -1,6 +1,6 @@
 local M = {}
 
-local ts_repo_url = "https://github.com/fe-lang/tree-sitter-fe.git"
+local ts_repo_url = "https://github.com/argotorg/fe.git"
 local plugin_runtime_dir = vim.fn.stdpath("data") .. "/nvim-fe-runtime"
 local queries_dir = plugin_runtime_dir .. "/queries/fe"
 local repo_dir = vim.fn.stdpath("data") .. "/tree-sitter-fe"
@@ -43,7 +43,7 @@ end
 local function setup_queries()
     ensure_dir(queries_dir)
 
-    local repo_queries_dir = repo_dir .. "/queries"
+    local repo_queries_dir = repo_dir .. "/crates/tree-sitter-fe/queries"
     if vim.fn.isdirectory(repo_queries_dir) == 1 then
         for _, query_file in ipairs(vim.fn.glob(repo_queries_dir .. "/*.scm", false, true)) do
             local dest = queries_dir .. "/" .. vim.fn.fnamemodify(query_file, ":t")
@@ -68,7 +68,7 @@ local function setup_treesitter()
     parser_config.fe = {
         install_info = {
             url = ts_repo_url,
-            files = { "src/parser.c", "src/scanner.c" },
+            files = { "crates/tree-sitter-fe/src/parser.c", "crates/tree-sitter-fe/src/scanner.c" },
             branch = "main",
         },
         filetype = "fe",
@@ -95,38 +95,18 @@ local function setup_lsp()
     vim.api.nvim_create_autocmd("FileType", {
         pattern = "fe",
         callback = function()
-            local function find_root(patterns)
-                local current_file = vim.api.nvim_buf_get_name(0)
-                local start_dir = vim.fs.dirname(current_file)
-
-                for _, pattern in ipairs(patterns) do
-                    -- vim.notify("Looking for pattern: " .. pattern, vim.log.levels.DEBUG)
-
-                    local found = vim.fs.find(pattern, {
-                        upward = true,
-                        path = start_dir,
-                    })
-                    -- vim.notify("Plain pattern result: " .. vim.inspect(found), vim.log.levels.DEBUG)
-
-                    if #found > 0 then
-                        local dir = vim.fs.dirname(found[1])
-                        -- vim.notify("Found root dir: " .. dir, vim.log.levels.DEBUG)
-                        return dir
-                    end
-                end
-                -- vim.notify("No root directory found", vim.log.levels.DEBUG)
-                return nil
-            end
-
-            local root_dir = find_root({ "fe.toml" })
-            if not root_dir then
-                root_dir = vim.fs.dirname(vim.api.nvim_buf_get_name(0))
-                -- vim.notify("Fe LSP: Using file parent as root directory.", vim.log.levels.INFO)
+            local current_file = vim.api.nvim_buf_get_name(0)
+            local result = vim.fn.system({ "fe", "root", current_file })
+            local root_dir
+            if vim.v.shell_error == 0 then
+                root_dir = vim.trim(result)
+            else
+                root_dir = vim.fs.dirname(current_file)
             end
 
             local client_id = vim.lsp.start_client({
                 name = "fe",
-                cmd = { "fe-language-server" },
+                cmd = { "fe", "lsp" },
                 root_dir = root_dir,
                 filetypes = { "fe" },
             })
