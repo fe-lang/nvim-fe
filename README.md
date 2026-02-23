@@ -9,10 +9,10 @@ Neovim plugin for the **Fe programming language** with:
 
 ### Prerequisites
 
-1. **`fe-language-server`**
+1. **`fe` CLI** (includes the language server)
 If you haven't already, install it to your `PATH`:
   ```bash
-  cargo install --git https://github.com/ethereum/fe.git --branch fe-v2 fe-language-server
+  cargo install --git https://github.com/argotorg/fe.git fe
   ```
 2. **Neovim 0.9.0 or later**
 Requires Tree-sitter and `vim.filetype.add` support
@@ -92,7 +92,7 @@ use({
 
 ### Missing LSP Features
 
-1. Ensure `fe-language-server` is installed and available in your `PATH`.
+1. Ensure `fe` is installed and available in your `PATH`.
 
 2. Check the LSP client:
    ```bash
