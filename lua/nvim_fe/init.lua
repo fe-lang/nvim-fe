@@ -3,43 +3,43 @@ local M = {}
 local ts_repo_url = "https://github.com/argotorg/fe.git"
 local plugin_runtime_dir = vim.fn.stdpath("data") .. "/nvim-fe-runtime"
 local queries_dir = plugin_runtime_dir .. "/queries/fe"
+local parser_dir = plugin_runtime_dir .. "/parser"
 local repo_dir = vim.fn.stdpath("data") .. "/tree-sitter-fe"
 
--- Ensure a directory exists
 local function ensure_dir(dir)
     if vim.fn.isdirectory(dir) == 0 then
         vim.fn.mkdir(dir, "p")
     end
 end
 
--- Prepend the plugin's runtime directory to Neovim's runtime path
 local function add_to_runtime()
     if not vim.tbl_contains(vim.opt.runtimepath:get(), plugin_runtime_dir) then
         vim.opt.runtimepath:prepend(plugin_runtime_dir)
     end
 end
 
--- Check if setup is needed
 local function needs_setup()
     if vim.fn.isdirectory(repo_dir) == 0 then
         return true
     end
+    local parser_so = parser_dir .. "/fe.so"
+    if vim.fn.filereadable(parser_so) == 0 then
+        return true
+    end
     local query_files = vim.fn.glob(queries_dir .. "/*.scm", false, true)
-    return #query_files == 0 -- Check if queries are missing
+    return #query_files == 0
 end
 
--- Clone or update the tree-sitter-fe repository
 local function setup_repository()
     if vim.fn.isdirectory(repo_dir) == 0 then
-        vim.fn.system({ "git", "clone", ts_repo_url, repo_dir })
-        vim.notify("Cloned tree-sitter-fe repository.", vim.log.levels.INFO)
+        vim.fn.system({ "git", "clone", "--depth", "1", ts_repo_url, repo_dir })
+        vim.notify("Cloned fe repository.", vim.log.levels.INFO)
     else
         vim.fn.system({ "git", "-C", repo_dir, "pull" })
-        vim.notify("Updated tree-sitter-fe repository.", vim.log.levels.INFO)
+        vim.notify("Updated fe repository.", vim.log.levels.INFO)
     end
 end
 
--- Set up Tree-sitter queries
 local function setup_queries()
     ensure_dir(queries_dir)
 
@@ -49,39 +49,52 @@ local function setup_queries()
             local dest = queries_dir .. "/" .. vim.fn.fnamemodify(query_file, ":t")
             vim.fn.system({ "cp", query_file, dest })
         end
-        vim.notify("Fe queries copied to plugin runtime path.", vim.log.levels.INFO)
     else
-        vim.notify("No queries directory found in tree-sitter-fe repository.", vim.log.levels.WARN)
+        vim.notify("No queries directory found in fe repository.", vim.log.levels.WARN)
     end
 end
 
--- Configure Tree-sitter for Fe
-local function setup_treesitter()
-    local ok, configs = pcall(require, "nvim-treesitter.configs")
-    if not ok then
-        vim.notify("nvim-treesitter is not installed. Please install it for Fe syntax highlighting.", vim.log.levels
-            .WARN)
-        return
+local function compile_parser()
+    ensure_dir(parser_dir)
+
+    local src_dir = repo_dir .. "/crates/tree-sitter-fe/src"
+    local parser_c = src_dir .. "/parser.c"
+    local scanner_c = src_dir .. "/scanner.c"
+    local output = parser_dir .. "/fe.so"
+
+    if vim.fn.filereadable(parser_c) == 0 then
+        vim.notify("parser.c not found, cannot compile Fe parser.", vim.log.levels.ERROR)
+        return false
     end
 
-    local parser_config = require("nvim-treesitter.parsers").get_parser_configs()
-    parser_config.fe = {
-        install_info = {
-            url = ts_repo_url,
-            files = { "crates/tree-sitter-fe/src/parser.c", "crates/tree-sitter-fe/src/scanner.c" },
-            branch = "main",
-        },
-        filetype = "fe",
-    }
+    local cc = vim.fn.executable("cc") == 1 and "cc"
+        or vim.fn.executable("gcc") == 1 and "gcc"
+        or vim.fn.executable("clang") == 1 and "clang"
+    if not cc then
+        vim.notify("No C compiler found. Install gcc or clang to compile the Fe parser.", vim.log.levels.ERROR)
+        return false
+    end
 
-    configs.setup({
-        ensure_installed = { "fe" },
-        highlight = { enable = true },
-        indent = { enable = true },
-    })
+    local sources = { parser_c }
+    if vim.fn.filereadable(scanner_c) == 1 then
+        table.insert(sources, scanner_c)
+    end
+
+    local cmd = { cc, "-o", output, "-shared", "-fPIC", "-O2", "-I", src_dir }
+    for _, src in ipairs(sources) do
+        table.insert(cmd, src)
+    end
+
+    local result = vim.fn.system(cmd)
+    if vim.v.shell_error ~= 0 then
+        vim.notify("Failed to compile Fe parser:\n" .. result, vim.log.levels.ERROR)
+        return false
+    end
+
+    vim.notify("Compiled Fe tree-sitter parser.", vim.log.levels.INFO)
+    return true
 end
 
--- Set up filetype detection for `.fe` files
 local function setup_filetype()
     vim.filetype.add({
         extension = {
@@ -90,7 +103,15 @@ local function setup_filetype()
     })
 end
 
--- Set up LSP for Fe
+local function setup_highlighting()
+    vim.api.nvim_create_autocmd("FileType", {
+        pattern = "fe",
+        callback = function()
+            pcall(vim.treesitter.start)
+        end,
+    })
+end
+
 local function setup_lsp()
     vim.api.nvim_create_autocmd("FileType", {
         pattern = "fe",
@@ -119,7 +140,6 @@ local function setup_lsp()
     })
 end
 
--- Plugin setup entry point
 function M.setup()
     ensure_dir(plugin_runtime_dir)
     add_to_runtime()
@@ -128,12 +148,10 @@ function M.setup()
     if needs_setup() then
         setup_repository()
         setup_queries()
-        setup_treesitter()
-        vim.notify("Fe plugin setup completed.", vim.log.levels.INFO)
-    else
-        setup_treesitter() -- Ensure Tree-sitter is configured
+        compile_parser()
     end
 
+    setup_highlighting()
     setup_lsp()
 end
 

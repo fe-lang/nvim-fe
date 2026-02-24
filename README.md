@@ -15,10 +15,9 @@ If you haven't already, install it to your `PATH`:
   cargo install --git https://github.com/argotorg/fe.git fe
   ```
 2. **Neovim 0.9.0 or later**
-Requires Tree-sitter and `vim.filetype.add` support
 
 3. **GCC or Clang**
-For compiling the Tree-sitter parser
+For compiling the tree-sitter parser (done automatically on first run)
 
 
 ---
@@ -30,12 +29,7 @@ For compiling the Tree-sitter parser
   cp -r ./ ~/.local/share/nvim/site/pack/plugins/start/nvim-fe
   ```
 
-2. Install `nvim-treesitter`:
-  ```bash
-  git clone https://github.com/nvim-treesitter/nvim-treesitter ~/.local/share/nvim/site/pack/plugins/start/nvim-treesitter
-  ```
-
-3. Add to `init.lua`:
+2. Add to `init.lua`:
   ```lua
   require("nvim_fe").setup()
   ```
@@ -52,9 +46,6 @@ use({
     config = function()
         require("nvim_fe").setup()
     end,
-    requires = {
-        "nvim-treesitter/nvim-treesitter",
-    },
 })
 ```
 
@@ -63,7 +54,6 @@ use({
 ```lua
 {
     "https://github.com/fe-lang/nvim-fe",
-    dependencies = { "nvim-treesitter/nvim-treesitter" },
     config = function()
         require("nvim_fe").setup()
     end,
@@ -76,11 +66,11 @@ use({
 
 ### Missing Syntax Highlighting
 
-1. Ensure `nvim-treesitter` is installed:
+1. Check that the parser was compiled:
    ```bash
-   :TSInstallInfo
+   :lua print(vim.fn.filereadable(vim.fn.stdpath("data") .. "/nvim-fe-runtime/parser/fe.so"))
    ```
-   Confirm `fe` is listed under "Parsers installed."
+   Should print `1`. If not, ensure `gcc` or `clang` is installed and re-run `:lua require("nvim_fe").setup()`.
 
 2. Check queries:
    ```bash
