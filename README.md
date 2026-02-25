@@ -12,6 +12,10 @@ Neovim plugin for the **Fe programming language** with:
 1. **`fe` CLI** (includes the language server)
 If you haven't already, install it to your `PATH`:
   ```bash
+  curl -fsSL https://raw.githubusercontent.com/argotorg/fe/master/feup/feup.sh | bash
+  ```
+  Or build from source:
+  ```bash
   cargo install --git https://github.com/argotorg/fe.git fe
   ```
 2. **Neovim 0.9.0 or later**
