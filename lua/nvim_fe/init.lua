@@ -49,7 +49,18 @@ local function needs_setup()
     return installed_ref() ~= ts_ref
 end
 
+local function repo_origin_url()
+    return vim.trim(vim.fn.system({ "git", "-C", repo_dir, "remote", "get-url", "origin" }))
+end
+
 local function setup_repository()
+    -- An older version of this plugin cloned a different repository (the fe
+    -- monorepo) into repo_dir. If the cached clone points anywhere other than
+    -- the grammar mirror, remove it so we re-clone with the right layout.
+    if vim.fn.isdirectory(repo_dir) == 1 and repo_origin_url() ~= ts_repo_url then
+        vim.fn.delete(repo_dir, "rf")
+    end
+
     if vim.fn.isdirectory(repo_dir) == 0 then
         vim.fn.system({ "git", "clone", "--depth", "1", "--branch", ts_ref, ts_repo_url, repo_dir })
         vim.notify("Cloned tree-sitter-fe @ " .. ts_ref .. ".", vim.log.levels.INFO)
