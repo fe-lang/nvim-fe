@@ -1,9 +1,14 @@
 local M = {}
 
-local ts_repo_url = "https://github.com/argotorg/fe.git"
+-- tree-sitter-fe is a generated mirror of the Fe grammar (source of truth:
+-- argotorg/fe). It carries the committed src/parser.c that we compile below.
+-- Pin a release tag; bumping it here re-syncs and recompiles on next start.
+local ts_repo_url = "https://github.com/fe-lang/tree-sitter-fe.git"
+local ts_ref = "v26.2.0"
 local plugin_runtime_dir = vim.fn.stdpath("data") .. "/nvim-fe-runtime"
 local queries_dir = plugin_runtime_dir .. "/queries/fe"
 local parser_dir = plugin_runtime_dir .. "/parser"
+local ref_marker = parser_dir .. "/.installed-ref"
 local repo_dir = vim.fn.stdpath("data") .. "/tree-sitter-fe"
 
 local function ensure_dir(dir)
@@ -18,6 +23,16 @@ local function add_to_runtime()
     end
 end
 
+local function installed_ref()
+    local f = io.open(ref_marker, "r")
+    if not f then
+        return nil
+    end
+    local ref = vim.trim(f:read("*a") or "")
+    f:close()
+    return ref
+end
+
 local function needs_setup()
     if vim.fn.isdirectory(repo_dir) == 0 then
         return true
@@ -27,23 +42,28 @@ local function needs_setup()
         return true
     end
     local query_files = vim.fn.glob(queries_dir .. "/*.scm", false, true)
-    return #query_files == 0
+    if #query_files == 0 then
+        return true
+    end
+    -- Re-sync when the pinned grammar ref changed (e.g. plugin update).
+    return installed_ref() ~= ts_ref
 end
 
 local function setup_repository()
     if vim.fn.isdirectory(repo_dir) == 0 then
-        vim.fn.system({ "git", "clone", "--depth", "1", ts_repo_url, repo_dir })
-        vim.notify("Cloned fe repository.", vim.log.levels.INFO)
+        vim.fn.system({ "git", "clone", "--depth", "1", "--branch", ts_ref, ts_repo_url, repo_dir })
+        vim.notify("Cloned tree-sitter-fe @ " .. ts_ref .. ".", vim.log.levels.INFO)
     else
-        vim.fn.system({ "git", "-C", repo_dir, "pull" })
-        vim.notify("Updated fe repository.", vim.log.levels.INFO)
+        vim.fn.system({ "git", "-C", repo_dir, "fetch", "--depth", "1", "origin", "tag", ts_ref })
+        vim.fn.system({ "git", "-C", repo_dir, "checkout", "--force", ts_ref })
+        vim.notify("Updated tree-sitter-fe to " .. ts_ref .. ".", vim.log.levels.INFO)
     end
 end
 
 local function setup_queries()
     ensure_dir(queries_dir)
 
-    local repo_queries_dir = repo_dir .. "/crates/tree-sitter-fe/queries"
+    local repo_queries_dir = repo_dir .. "/queries"
     if vim.fn.isdirectory(repo_queries_dir) == 1 then
         for _, query_file in ipairs(vim.fn.glob(repo_queries_dir .. "/*.scm", false, true)) do
             local dest = queries_dir .. "/" .. vim.fn.fnamemodify(query_file, ":t")
@@ -57,7 +77,7 @@ end
 local function compile_parser()
     ensure_dir(parser_dir)
 
-    local src_dir = repo_dir .. "/crates/tree-sitter-fe/src"
+    local src_dir = repo_dir .. "/src"
     local parser_c = src_dir .. "/parser.c"
     local scanner_c = src_dir .. "/scanner.c"
     local output = parser_dir .. "/fe.so"
@@ -89,6 +109,12 @@ local function compile_parser()
     if vim.v.shell_error ~= 0 then
         vim.notify("Failed to compile Fe parser:\n" .. result, vim.log.levels.ERROR)
         return false
+    end
+
+    local marker = io.open(ref_marker, "w")
+    if marker then
+        marker:write(ts_ref)
+        marker:close()
     end
 
     vim.notify("Compiled Fe tree-sitter parser.", vim.log.levels.INFO)
